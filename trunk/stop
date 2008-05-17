@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# just kill all the 'beam' processes
+ps|grep beam|grep -v grep|awk '{print $1}'|xargs kill

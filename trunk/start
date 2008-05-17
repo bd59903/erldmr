@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# setup the .hosts.erlang file if needed
+if [ ! -f ~/.hosts.erlang ]
+then
+    echo "'`hostname`'." > ~/.hosts.erlang
+fi
+
+# compile the src
+erlc *.erl
+
+# startup four nodes, and attach a shell to the last
+erl -sname a -s dmr -noshell -detached
+erl -sname b -s dmr -noshell -detached
+erl -sname c -s dmr -noshell -detached
+exec erl -sname d -s dmr
