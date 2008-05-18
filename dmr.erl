@@ -24,7 +24,8 @@
 -behaviour(supervisor).
 
 -export([start/0, stop/0, restart/0, start/2, stop/1, init/1]).
--export([add/1, map/1, map/2]).
+-export([add/1, add_fast/1, map/1, map/2, map_args/2, map_args/3]).
+-export([map_reduce/2, map_reduce/3, map_reduce_args/3, map_reduce_args/4]).
 
 -define(MAX_RESTART, 5).
 -define(MAX_TIME, 60).
@@ -73,26 +74,54 @@ childspec(dmr_counter) ->
         [dmr_counter]
     }.
 
-% external interface and helper functions
+% external interface and related helper functions
 
 add(Data) ->
-    gen_server:call(get_pid(), {add, Data}).
+    call_one({add, Data}).
 
-map(Func) ->
-    map(Func, self()).
+add_fast(Data) ->
+    cast_one({add, Data}).
 
-map(Func, From) ->
-    Nodes = get_pid_list(),
-    cast_all(Func, From, Nodes),
-    recv_all(length(Nodes), []).
+map(Map) ->
+    map(Map, self()).
 
-% mapred(Map, Red, From) ->  reduce on remote node
+map(Map, From) ->
+    map_proc({map, From, Map}).
 
-cast_all(_Func, _From, []) ->
+map_args(Map, Args) ->
+    map_args(Map, Args, self()).
+
+map_args(Map, Args, From) ->
+    map_proc({map, From, Args, Map}).
+
+map_reduce(Map, Reduce) ->
+    map_reduce(Map, Reduce, self()).
+
+map_reduce(Map, Reduce, From) ->
+    map_proc({map_reduce, From, Map, Reduce}).
+
+map_reduce_args(Map, Reduce, Args) ->
+    map_reduce_args(Map, Reduce, Args, self()).
+
+map_reduce_args(Map, Reduce, Args, From) ->
+    map_proc({map_reduce, From, Args, Map, Reduce}).
+
+map_proc(Msg) ->
+    Pids = get_pid_list(),
+    cast_all(Msg, Pids),
+    recv_all(length(Pids), []).
+
+call_one(Msg) ->
+    gen_server:call(get_pid(), Msg).
+
+cast_one(Msg) ->
+    gen_server:cast(get_pid(), Msg).
+
+cast_all(_Msg, []) ->
     [];
-cast_all(Func, From, [Pid | Pids]) ->
-    gen_server:cast(Pid, {map, {From, Func}}),
-    cast_all(Func, From, Pids).
+cast_all(Msg, [Pid | Pids]) ->
+    gen_server:cast(Pid, Msg),
+    cast_all(Msg, Pids).
 
 recv_all(0, Results) -> Results;
 recv_all(Total, Results) ->
@@ -103,8 +132,8 @@ recv_all(Total, Results) ->
 
 get_pid() ->
     Count = gen_server:call(dmr_counter, get),
-    Nodes = get_pid_list(),
-    lists:nth(1 + (Count rem length(Nodes)), Nodes).
+    Pids = get_pid_list(),
+    lists:nth(1 + (Count rem length(Pids)), Pids).
 
 get_pid_list() ->
     pg2:get_members(dmr).

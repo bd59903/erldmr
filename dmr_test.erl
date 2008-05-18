@@ -20,24 +20,63 @@
 %%
 
 -module(dmr_test).
--export([load/1, map/0]).
+-export([all/0, count/0, count_where/0, count_num/0, select/0, load/1]).
 
-% this calls the distributed mapping function and returns all {id,num} pairs
-% for apples, increments the apple number, and ignores all other tuples.
-map() ->
+% run all tests
+all() ->
+    [
+        {count, count()},
+        {count_where, count_where()},
+        {count_num, count_num()}
+    ].
+
+% get a count of all objects in system
+count() ->
+    dmr:map_reduce(
+        fun (_) ->
+            {[1]}
+        end,
+        fun (Results) ->
+            [length(Results)]
+        end).
+
+% get a count of all objects in system, grouped by source node
+count_where() ->
+    dmr:map_reduce(
+        fun (_) ->
+            {[1]}
+        end,
+        fun (Results) ->
+            [{node, length(Results)}]
+        end).
+
+% sum all of the 'Num' elements of the tuples
+count_num() ->
+    dmr:map_reduce(
+        fun ({_, _, _, Num}) ->
+                {[Num]};
+            (_) ->
+                ok
+        end,
+        fun (Results) ->
+            [lists:sum(Results)]
+        end).
+
+% returns all {id,num} pairs for apples and increment the apple number
+select() ->
     dmr:map(
         fun ({Id, "Apple", Tup, Num}) ->
                 {[{Id, "Apple", Tup, Num + 1}], [{Id,Num}]};
-            (Data) ->
-                {[Data], []}
+            (_) ->
+                ok
         end).
 
-% this will just load X tuples of "random" data
+% this will load X tuples of "random" data
 load(X) ->
     load_record(X, 0, ["Apple", "Orange", "Banana"], [a,b,c,d,e,f,g],
         [12,54,665,746,3465]).
 
 load_record(0, _, _, _, _) -> ok;
 load_record(X, Id, [Name | Names], [Tup | Tups], [Num | Nums]) ->
-    dmr:add({Id, Name, Tup, Num}),
+    dmr:add_fast({Id, Name, Tup, Num}),
     load_record(X - 1, Id + 1, Names ++ [Name], Tups ++ [Tup], Nums ++ [Num]).
