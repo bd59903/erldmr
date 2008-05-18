@@ -37,20 +37,52 @@ init(_Args) ->
 handle_call({add, Data}, _From, State) ->
     {reply, ok, [Data | State]};
 handle_call(_Msg, _From, State) ->
-    {noreply, State}.
+    {reply, unknown_command, State}.
 
-handle_cast({map, {Pid, Func}}, State) ->
-    {NewState, Results} = run_map(Func, State, [], []),
-    Pid ! Results,
+handle_cast({add, Data}, State) ->
+    {noreply, [Data | State]};
+handle_cast({map, From, Map}, State) ->
+    {NewState, Results} = run_map(Map, State, [], []),
+    From ! Results,
+    {noreply, NewState};
+handle_cast({map, From, Args, Map}, State) ->
+    {NewState, Results} = run_map(Map, Args, State, [], []),
+    From ! Results,
+    {noreply, NewState};
+handle_cast({map_reduce, From, Map, Reduce}, State) ->
+    {NewState, Results} = run_map(Map, State, [], []),
+    From ! Reduce(Results),
+    {noreply, NewState};
+handle_cast({map_reduce, From, Args, Map, Reduce}, State) ->
+    {NewState, Results} = run_map(Map, Args, State, [], []),
+    From ! Reduce(Results),
     {noreply, NewState};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-run_map(_Func, [], NewState, Results) ->
+run_map(_Map, [], NewState, Results) ->
     {NewState, Results};
-run_map(Func, [Data | State], NewState, Results) ->
-    {NewData, Result} = Func(Data),
-    run_map(Func, State, NewState ++ NewData, Results ++ Result).
+run_map(Map, [Data | State], NewState, Results) ->
+    case Map(Data) of
+        {NewData, Result} ->
+            run_map(Map, State, NewData ++ NewState, Result ++ Results);
+        {Result} ->
+            run_map(Map, State, [Data | NewState], Result ++ Results);
+        _ ->
+            run_map(Map, State, [Data | NewState], Results)
+    end.
+
+run_map(_Map, _Args, [], NewState, Results) ->
+    {NewState, Results};
+run_map(Map, Args, [Data | State], NewState, Results) ->
+    case Map(Data, Args) of
+        {NewData, Result} ->
+            run_map(Map, Args, State, NewData ++ NewState, Result ++ Results);
+        {Result} ->
+            run_map(Map, Args, State, [Data | NewState], Result ++ Results);
+        _ ->
+            run_map(Map, Args, State, [Data | NewState], Results)
+    end.
 
 handle_info(_Info, State) ->
     {noreply, State}.
