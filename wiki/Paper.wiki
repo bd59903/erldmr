@@ -1,11 +1,96 @@
 #summary Distributed Map/Reduce in Erlang
 
 = Distributed Map/Reduce in Erlang =
-=== Eric Day ===
+* Eric Day *
 *_http://code.google.com/p/erldmr/_*
 
 ----
 
-== Abstract ==
+=== Abstract ===
 
-This project was inspired by the MapReduce programming model developed at Google `[1]`. While the Google model focuses on large batch-style processing for massive amounts of data and returning analytical results, this simplified implemntation focuses more on everyday applications, and how they can harness the same power the model provides. The current implementation serves as a prototype and leaves out some the advanced features and refinements presented in the Google paper. Potential paths for development for this implemtation are mentioned in section 6, "Improvements".
+This project was inspired by the !MapReduce programming model developed at Google `[1]`. While the Google model focuses on large batch-style processing for massive amounts of data and returning analytical results, this simplified implemntation focuses more on everyday applications, and how they can harness the same power the model provides. The current implementation serves as a prototype and leaves out some the advanced features and refinements presented in the Google paper. Potential paths for development for this implemtation are mentioned in section 6, "Improvements".
+
+The model used here uses two core ideas provided by functional languages: map and reduce (or sometimes referred to as fold). Map is the act of executing (or "mapping") a given function over each item in a list. Reduce (or fold) is the act of collapsing a list of items into a smaller set (or single item) based on a given function. This paper explores a method of distributing these operations over a number of nodes, which may exist on separate physical machines. This provides enhanced performance through parallel execution.
+
+This implementation leverages many of the benefits functional languages provide to ease in the deployment and usage. All code and supporting documentation can be found at the URL given at the top of this paper.
+
+
+=== 1 Introduction ===
+
+* 1.1 Simplified Model *
+
+One major simplification made in this implemtation is not requiring an underlying global filesystem. The Google implementation is built upon their own file system (GFS) [2] which provides fast data access and fault-tolerance. The implemntation described in this paper only deals with application level RAM-based storage, but persistent solutions are discussed in section 6. Not requiring an underlying filesystem such as GFS allows for faster deployment due to less dependencies and the ability to start nodes any system with the Erlang runtime system.
+
+* 1.1 Functional Roots *
+
+* 1.2  *
+
+* 1.3 Why Erlang *
+
+----
+
+=== 2 Implementation ===
+
+* 2.1 OTP Framework *
+
+* 2.2 Client Interface *
+
+* 2.3 Server Interface *
+
+* 2.4 Server Details *
+
+----
+
+=== 3 Testing: Numerial Computation ===
+
+----
+
+=== 4 Testing: Database Application ===
+
+----
+
+=== 5 Performance Analysis ===
+
+* 5.1 One Node *
+
+* 5.2 One Machine *
+
+* 5.3 Three Machines *
+
+* 5.4 Many Machines *
+
+----
+
+=== 6 Improvements ===
+
+* 6.1 Persistant Storage *
+
+File Scan (dets)
+
+B-Tree
+
+Mnesia (get replication)
+
+* 6.2 Fault-tolerance *
+
+* 6.3 Isolated Databases *
+
+* 6.4 Access Control Lists *
+
+* 6.5 External Interfaces *
+
+Send code as query, compile, map, ... TCP, other lang bindings
+
+----
+
+=== 7 Conclusions ===
+
+----
+
+{{{
+
+[1] Jeffrey Dean and Sanjay Ghemawat. MapReduce: Simplified Data Processing on Large Clusters. http://labs.google.com/papers/mapreduce.html.
+
+[2] Sanjay Ghemawat, Howard Gobioff, and Shun-Tak Leung. The Google File System. http://labs.google.com/papers/gfs.html.
+
+}}}
