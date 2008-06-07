@@ -1,0 +1,11 @@
+#summary Distributed Map/Reduce in Erlang
+
+= Distributed Map/Reduce in Erlang =
+=== Eric Day ===
+*_http://code.google.com/p/erldmr/_*
+
+----
+
+== Abstract ==
+
+This project was inspired by the MapReduce programming model developed at Google `[1]`. While the Google model focuses on large batch-style processing for massive amounts of data and returning analytical results, this simplified implemntation focuses more on everyday applications, and how they can harness the same power the model provides. The current implementation serves as a prototype and leaves out some the advanced features and refinements presented in the Google paper. Potential paths for development for this implemtation are mentioned in section 6, "Improvements".
