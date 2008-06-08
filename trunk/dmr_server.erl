@@ -55,7 +55,7 @@ handle_cast({map_reduce, From, Map, Reduce}, State) ->
     {noreply, NewState};
 handle_cast({map_reduce, From, Args, Map, Reduce}, State) ->
     {NewState, Results} = run_map(Map, Args, State, [], []),
-    From ! Reduce(Results),
+    From ! Reduce(Results, Args),
     {noreply, NewState};
 handle_cast(_Msg, State) ->
     {noreply, State}.
