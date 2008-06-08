@@ -20,50 +20,61 @@
 %%
 
 -module(dmr_test).
--export([all/0, count/0, count_where/0, count_num/0, select/0, load/1]).
+-export([num_load/1, num_sum/0, num_avg/0, num_avg_sqrt/0, num_sort/0]).
+-export([db_load/1, db_select/0]).
+-export([sort_verify/1]).
 
-% run all tests
-all() ->
-    [
-        {count, count()},
-        {count_where, count_where()},
-        {count_num, count_num()}
-    ].
+%
+% numerical tests
+%
 
-% get a count of all objects in system
-count() ->
-    dmr:map_reduce(
-        fun (_) ->
-            {[1]}
-        end,
-        fun (Results) ->
-            [length(Results)]
-        end).
+% load X numbers
+num_load(Num) ->
+    lists:map(fun dmr:add_fast/1, lists:seq(1, Num)),
+    ok.
 
-% get a count of all objects in system, grouped by source node
-count_where() ->
-    dmr:map_reduce(
-        fun (_) ->
-            {[1]}
-        end,
-        fun (Results) ->
-            [{node, length(Results)}]
-        end).
+% get the sum of all numbers
+num_sum() ->
+    lists:sum(dmr:map_reduce(
+        fun (Num) -> {[Num]} end,
+        fun (Results) -> [lists:sum(Results)] end)).
 
-% sum all of the 'Num' elements of the tuples
-count_num() ->
-    dmr:map_reduce(
-        fun ({_, _, _, Num}) ->
-                {[Num]};
-            (_) ->
-                ok
-        end,
-        fun (Results) ->
-            [lists:sum(Results)]
-        end).
+% get the average of all numbers
+num_avg() ->
+    avg(dmr:map_reduce(
+        fun (Num) -> {[Num]} end,
+        fun (Results) -> [{length(Results), lists:sum(Results)}] end)).
+
+% get the average of square root of all numbers
+num_avg_sqrt() ->
+    avg(dmr:map_reduce(
+        fun (Num) -> {[math:sqrt(Num)]} end,
+        fun (Results) -> [{length(Results), lists:sum(Results)}] end)).
+
+% perform a distributed merge sort on all numbers
+num_sort() ->
+    merge_sort(dmr:map_reduce(
+        fun (Num) -> {[Num]} end,
+        fun (Results) -> [lists:sort(Results)] end)).
+
+%
+% database tests
+%
+
+% this will load X tuples of "random" data
+db_load(X) ->
+    db_load(X, 0,
+        ["Apple", "Orange", "Banana"],
+        [a,b,c,d,e,f,g],
+        [12,54,665,746,3465]).
+
+db_load(0, _, _, _, _) -> ok;
+db_load(X, Id, [Name | Names], [Tup | Tups], [Num | Nums]) ->
+    dmr:add_fast({Id, Name, Tup, Num}),
+    db_load(X - 1, Id + 1, Names ++ [Name], Tups ++ [Tup], Nums ++ [Num]).
 
 % returns all {id,num} pairs for apples and increment the apple number
-select() ->
+db_select() ->
     dmr:map(
         fun ({Id, "Apple", Tup, Num}) ->
                 {[{Id, "Apple", Tup, Num + 1}], [{Id,Num}]};
@@ -71,12 +82,37 @@ select() ->
                 ok
         end).
 
-% this will load X tuples of "random" data
-load(X) ->
-    load_record(X, 0, ["Apple", "Orange", "Banana"], [a,b,c,d,e,f,g],
-        [12,54,665,746,3465]).
+%
+% helper functions
+%
 
-load_record(0, _, _, _, _) -> ok;
-load_record(X, Id, [Name | Names], [Tup | Tups], [Num | Nums]) ->
-    dmr:add_fast({Id, Name, Tup, Num}),
-    load_record(X - 1, Id + 1, Names ++ [Name], Tups ++ [Tup], Nums ++ [Num]).
+% get the average from aggregated {Count, Sum} pairs
+avg(List) -> avg(List, 0, 0).
+avg([], Count, Sum) -> Sum / Count;
+avg([{C, S} | Tail], Count, Sum) -> avg(Tail, Count + C, Sum + S).
+
+% sort 
+merge_sort([]) -> [];
+merge_sort([[]]) -> [];
+merge_sort(Results) ->
+    {Next, NewResults} = merge_sort_next(Results),
+    [Next | merge_sort(NewResults)].
+
+merge_sort_next([[] | Results]) ->
+    merge_sort_next(Results);
+merge_sort_next([[H | T] | Results]) ->
+    merge_sort_next(Results, H, T, []).
+
+merge_sort_next([], Next, NextT, NewResults) ->
+    {Next, [NextT | NewResults]};
+merge_sort_next([[H | T] | Results], Next, NextT, NewResults) when H < Next ->
+    merge_sort_next(Results, H, T, [[Next | NextT] | NewResults]);
+merge_sort_next([Skip | Results], Next, NextT, NewResults) ->
+    merge_sort_next(Results, Next, NextT, [Skip | NewResults]).
+
+sort_verify([]) -> true;
+sort_verify([H | T]) -> sort_verify(T, H).
+
+sort_verify([], _) -> true;
+sort_verify([H | T], Last) when Last =< H -> sort_verify(T, H);
+sort_verify(_, _) -> false.

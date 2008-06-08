@@ -24,7 +24,8 @@
 -behaviour(supervisor).
 
 -export([start/0, stop/0, restart/0, start/2, stop/1, init/1]).
--export([add/1, add_fast/1, map/1, map/2, map_args/2, map_args/3]).
+-export([stat/0, add/1, add_fast/1, del/1, del_all/0]).
+-export([map/1, map/2, map_args/2, map_args/3]).
 -export([map_reduce/2, map_reduce/3, map_reduce_args/3, map_reduce_args/4]).
 
 -define(MAX_RESTART, 5).
@@ -76,11 +77,41 @@ childspec(dmr_counter) ->
 
 % external interface and related helper functions
 
+stat() ->
+    map_reduce(
+        fun (_) ->
+            {[1]}
+        end,
+        fun (Results) ->
+            [{node(), length(Results)}]
+        end).
+
 add(Data) ->
     call_one({add, Data}).
 
 add_fast(Data) ->
     cast_one({add, Data}).
+
+del(Data) ->
+    lists:sum(map_reduce_args(
+        fun (Del, Del) ->
+                {[], [1]};
+            (_, _) ->
+                ok
+        end,
+        fun (Results) ->
+            [lists:sum(Results)]
+        end,
+        Data)).
+
+del_all() ->
+    lists:sum(map_reduce(
+        fun (_) ->
+                {[], [1]}
+        end,
+        fun (Results) ->
+            [lists:sum(Results)]
+        end)).
 
 map(Map) ->
     map(Map, self()).
