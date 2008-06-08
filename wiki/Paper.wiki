@@ -10,23 +10,23 @@
 
 === Abstract ===
 
-This project was inspired by the !MapReduce programming model developed at Google `[1]`. While the Google model focuses on large batch-style processing for massive amounts of data and returning analytical results, this lightweight and simplified implementation focuses more on everyday applications, and how they can harness the same power the model provides. The current implementation serves as a prototype and leaves out some the advanced features and refinements presented in the Google paper. Potential paths for development for this implementation are mentioned in section 6, "Improvements".
+This project was inspired by the !MapReduce programming model developed at Google `[1]`. While the Google model focuses on large batch-style processing for massive amounts of data and returning analytical results, this lightweight and simplified implementation focuses more on everyday applications and how they can harness the same power the model provides. The current implementation serves as a prototype and leaves out some the advanced features and refinements presented in the Google paper. Potential paths for development for this implementation are mentioned in section 6.
 
-The model used here uses two core ideas provided by functional languages: map and reduce (or sometimes referred to as fold). Map is the act of executing (or "mapping") a given function over each item in a list. Reduce (or fold) is the act of collapsing a list of items into a smaller set (or single item) based on a given function. This paper explores a method of distributing these operations over a number of nodes, which may exist on separate physical machines. This provides enhanced performance through parallel execution. Along with retrieving information about individual items stored within each node, this implementation also supports the ability for the map function to mutate the stored objects stored. Applications can use this in order to create dynamic data storage, which then extends to database oriented applications.
+The model used here uses two core ideas provided by functional languages: map and reduce (or sometimes referred to as fold). Map is the act of executing (or "mapping") a given function over each item in a list. Reduce (or fold) is the act of collapsing a list of items into a smaller set (or single item) based on a given function. This paper explores a method of distributing these operations over a number of nodes, which may exist on separate physical machines. This provides enhanced performance through parallel execution. Along with retrieving information about individual items stored within each node, this implementation also supports the ability for the map function to mutate the stored items. Applications can use this in order to create dynamic data storage, which can then be extended to database oriented applications.
 
-This implementation leverages many of the features functional languages provide to ease in deployment and testing. Treating functions as a first class object (or variables) is one of the key components to constructing quick tests and getting feedback since it allows you to define your function on the fly. You also have the built-in functions (bifs) and standard runtime modules within Erlang at your disposal when constructing your map and reduce functions. All code and supporting documentation for this project can be found at the URL given at the top of this paper.
+This implementation leverages many of the features functional languages provide to ease in deployment and testing. Treating functions as a first class object (or variable) is one of the key components to constructing quick tests and getting feedback since it allows you to define your function on the fly. You also have the built-in functions (bifs) and standard runtime modules within Erlang at your disposal when constructing your map and reduce functions. All code and supporting documentation for this project can be found at the URL given at the top of this paper. Basic Erlang knowledge is assumed throughout the paper, so please refer to the documentation from `[2]` if needed.
 
 === 1 Introduction ===
 
-While doing research on the various programming models for parallel and distributed computation systems, I began to think about ways that these ideas could be brought to more common applications. I was also not able to find a simple system that could be setup in a short amount that would allow me to test these ideas and write some prototype applications. One specific application I had in mind was looking at ways to implement the functionality of a traditional database management system (DBMS) on such a programming model, which is explored further in section 4.
+While doing research on the various programming models for parallel and distributed computation systems, I began to think about ways that these ideas could be brought to more common applications. I was not able to find a simple system that could be setup in a short amount that would allow me to test these ideas and write some prototype applications. One specific application I had in mind was looking at ways to implement the functionality of a traditional database management system (DBMS), which is explored further in section 4.
 
 This project aims to be a simple implementation of this distributed, parallel programming model that will allow people to get setup quickly so they can begin building their own prototypes without excessive overhead. Being based on a functional language brings all the benefits of functional language development such as fast development time, succinct code, and improved program correctness. Currently Erlang `[2]` is the only way to interface with the system, but the ability to interface with other languages is discussed as a possible improvement in section 6.5.
 
 * 1.1 Simplified Model *
 
-This implementation focuses on the core of the programming model, and removes many of the robust and fault-tolerant features discussed in Google's implementation. This allowed for faster initial development, but these features may be added at a later time if needed.
+This implementation focuses on the core of the programming model, and removes many of the robust and fault-tolerant features discussed in Google's implementation. This allowed for faster initial development, and these additional features may be added at a later time if needed.
 
-One major simplification made in this implementation is not requiring an underlying global filesystem. The Google implementation is built upon their own file system (GFS) `[3]` which provides fast data access and fault-tolerance. The implementation described in this paper only deals with application level RAM-based storage, but persistent solutions are discussed in section 6.1. Not requiring a specific underlying filesystem allows for faster deployment due to less dependencies and the ability to start nodes any system with the Erlang runtime system.
+One major simplification made in this implementation is not requiring an underlying global filesystem. The Google implementation is built upon their own file system (GFS) `[3]` which provides fast data access and fault-tolerance. The implementation described in this paper only deals with application level RAM-based storage, but persistent solutions are discussed in section 6.1. Not requiring a specific underlying filesystem allows for faster deployment due to less dependencies and the ability to start nodes on any system with just the Erlang runtime environment.
 
 Another simplification is not supporting distribution of map and reduce functions on a particular partition of the data set. Both the map and reduce functions will be executed on the same node. While this requires more processing to be done on each node, it reduces the potential network latency for shuffling data between nodes for processing. Related to this is that there is no master node coordinating the map and reduce tasks across all nodes. This means if a particular node should fail the job will not be restarted. This is also something that can be added easily at a later time if needed.
 
@@ -34,77 +34,94 @@ Another simplification is not supporting distribution of map and reduce function
 
 As mentioned before, the map and reduce function concept comes from the core set of functions for functional languages. Many other language constructs can built upon these. For example, in Erlang, the statement:
 
-`lists:map(fun (X) -> X * 2 end, [1,2,3,4,5]).`
+{{{
+lists:map(fun (X) -> X * 2 end, [1,2,3,4,5]).
+}}}
 
-Will return the list `[2,4,6,8,10]`. As you can see, the function returns the value of the input returned by two, and this is applied to each element of the list.
+Will return the list `[2,4,6,8,10]`. As you can see, the function returns the value of the input returned by two, and this is applied to each element of the list. The reduce function, also commonly known as fold, takes a function, a list, and an initial value as argument to generate some final result. For example, to sum a list of numbers, you can use:
 
-The reduce function, also commonly known as fold, takes a function, a list, and an initial value as argument to generate some final result. For example, to sum a list of numbers, you can use:
+{{{
+lists:foldr(fun (X, Sum) -> X + Sum end, 0, [1,2,3,4,5]).
+}}}
 
-`lists:foldr(fun (X, Sum) -> X + Sum end, 0, [1,2,3,4,5]).`
+This initializes `Sum` to 0, runs the given function on each element of the list (using the return value for the new `Sum` value), and when finished returns the value `15`. The idea of this project is to now take these basic building blocks and produce a system where the lists are very large, persistent, and spread over a number of nodes. The functions can then be run individually on the partitions on each node in parallel, eventually returning results to the calling process.
 
-This returns the value `15`. The idea is to now take these basic building blocks and produce a system where the lists are very large, that data within the lists are persistent, and so that the functions can run on partitions of these lists in parallel across many nodes.
-
-An important concept used here is the ability to pass entire functions as arguments, and not just references (like function pointers in C). This idea is not unique to functional languages, but it is a necessary feature and is often referred to as a functional language concept. This is especially important when dealing with distributed nodes since the function may actually be passed over a network and remotely executed. Using this ability of functional languages makes development fast, since you can create them on the fly rather than having to push a code module to all nodes before being able to execute it.
+An important concept used here is the ability to pass entire functions as arguments, and not just references. Languages like C can only pass around function pointers, where functional languages pass the entire function within the variable. This idea is not unique to functional languages, but it is a necessary feature and is often referred to as a functional language concept. This is especially important when dealing with distributed nodes since the function may actually be passed over a network and remotely executed. Using this ability of functional languages makes development fast, since you can create them on the fly rather than having to push a code module to all nodes before being able to execute it.
 
 * 1.3 Why Erlang *
 
-Erlang was natural choice to use to implement this project for a number of reasons. Beyond being functional, Erlang was written to provide a robust, distributed runtime environment. Processes within Erlang can communicate with each other using a simple asynchronous message passing interface. The message passing is not restricted to processes within a single node either, they may be in another node, possibly on a separate physical machine. This provides an easy to use framework for building distributed applications.
+Erlang was natural choice to use for implementing this project for a number of reasons. Beyond being functional, Erlang was written to provide a robust, distributed runtime environment. Processes within Erlang can communicate with each other using a simple asynchronous message passing interface. The message passing is not restricted to processes within a single node either, they may be in another node, possibly on a separate physical machine. This provides an easy to use framework for building distributed applications.
 
-Erlang also provides an easy way for distributed nodes to connect to one another and, once connected, for certain processes to create and join globally named process groups (using the pg2 module). I also leveraged some components of the Open Telecom Platform (OTP) to speed up the initial development of the server. By building on all of these existing components, only a couple hundred lines of code needed to be written to get the core functionality working.
+Erlang also provides an easy way for distributed nodes to connect to one another and, once connected, for certain processes to create and join globally named process groups (using the pg2 module). I also leveraged some components of the Open Telecom Platform (OTP) to speed up the initial development of the server. By building on all of these existing components, only a couple hundred lines of code needed to be written to get the core functionality of this project working. Lastly, having been used in the telecommunications industry since it was written, we can be sure it is stable and has relatively good performance.
 
 === 2 Implementation ===
 
-This project follows the OTP design framework provided by the Erlang runtime system. More specifically, it uses the application, supervisor, and gen_server behaviors. Using these as the core server allowed for a quick, robust client-server framework, along with following common design principles so other developers can follow the source. The `dmr.app` file describes the runtime configuration parameters so a single node can be started by running:
+This project follows the OTP design framework provided by the Erlang runtime system. More specifically, it uses the `application`, `supervisor`, and `gen_server` behaviors. Using these to design the core server allowed for a quick, robust client-server framework. Also, since these are common design principles in Erlang, other developers can come up to speed and understand the source quickly. The `dmr.app` file describes the runtime configuration parameters so a single node can be started by running:
 
-`erl -sname mynode -s dmr`
+{{{
+erl -sname mynode -s dmr
+}}}
 
-This triggers the application behavior by run `dmr:start()` in `dmr.erl`. The supervisor behavior will then start on top of this, creating two additional processes. One process will use `dmr_server.erl` which contains a request handler for the map and reduce requests, and the other process will start a simple counter server in `dmr_counter.erl` to enable round-robin distribution when adding data.
+This triggers the `application` behavior by running `dmr:start()` in `dmr.erl`. The supervisor behavior, which monitors and restarts processes under it, will then start and create two additional processes. One process will use `dmr_server.erl` which contains a request handler for the add, map and reduce requests. The other process will start a simple counter server using `dmr_counter.erl` to enable round-robin distribution when adding data.
 
 * 2.1 Client Interface *
 
-The client interface is defined in `dmr.erl`. It consists of a an interface to add and delete data from the system, run a map function over the data in the system, or run a map and reduce function in the system. For each of the map and map_reduce functions, you may specify an optional process ID to send results to, or an argument to pass into the map function when called. There is also a stat function to grab the number of items held on each node in the system.
+The client interface is defined in `dmr.erl`. It consists of a an interface to add or delete data from the system, run a map function over the data in the system, or run a map and reduce function in the system. For each of the map and map_reduce functions, you may specify an optional process ID to send results to, or an argument to pass into the map and reduce functions when called. There is also a stat function to grab the number of items held on each node in the system.
 
-To add the number '42' as a data item in the system, you would run:
-
-`dmr:add(42).`
-
-This will wait until the server process that handles the request has added the data and responds. If you simply want to send the request but not wait for a reply, you can use:
-
-`dmr:add_fast(43).`
-
-This will return immediately with no guarantee the server process completed. This function is useful when bulk loading data for testing. To see how many items have been loaded into the system, you can run:
-
-`dmr:stat().`
-
-Which will return a list of `{node name,count}` pairs for each node in the system. To run a map function on the data in the system, you can run:
-
-`dmr:map(fun (Num) -> {[Num + 1000]} end).`
-
-This will run a function which returns each item plus 1000 back to the calling process. We can also replace the existing values while returning a value by returning a two-tuple from our map function. The first is the new item value, and the second is the value to return to the process. For example:
-
-`dmr:map(fun (Num) -> {[Num + 100], [Num + 1000]} end).`
-
-This will return the same values as before (each item + 1000) but also replaces the existing value with the old value + 100. Now running the same map operation will return each value incremented by 100 (and also increments the item on the data node by another 100). Note that the replace and return items in the return tuple are lists, so you are able to give an empty list (which deletes the item or returns the item), or can even replace or return with multiple items. For example:
-
-`dmr:map(fun (Num) -> {[Num,Num], []} end)`
-
-This will duplicate all items in the system, which results in twice as many items overall. Also, since the return value is `[]`, it will not return anything to the calling process.
-
-The map_reduce variants allow for a reduce function to be run on the resulting data set at the remote node before returning result to the calling process. This is especially useful for aggregate operations like summing up numbers. For example:
+To add the integer `42` as a data item in the system, you would run:
 
 {{{
-dmr:map_reduce(fun (Num) -> {[Num]} end, fun (Results) -> [lists:sum(Results)] end).
+dmr:add(42).
 }}}
 
-This will return a list which represents the sum of items on each data node. This can then be passed into a `lists:sum()` in the calling process to obtain the overall sum of items in the system.
+This will wait until the server process that handles the request to add the data and respond. If you simply want to send the request but not wait for a reply, you can use:
+
+{{{
+dmr:add_fast(43).
+}}}
+
+This will return immediately with no guarantee the server process completed. This function is much faster and is useful when bulk loading data for testing. To see how many items have been loaded into the system, you can run:
+
+{{{
+dmr:stat().
+}}}
+
+Which will return a list of `{node name,count}` pairs for each node in the system. Now, to run a map function on the data in the system, you can run:
+
+{{{
+dmr:map(fun (Num) -> {[Num + 1000]} end).
+}}}
+
+This will run a function which returns each item plus 1000 back to the calling process. The map function also has the ability to replace the existing values while returning a value by returning a two-tuple. The first item in the tuple is a list of new item values, and the second item in the tuple is the list of values to return to the calling process. For example:
+
+{{{
+dmr:map(fun (Num) -> {[Num + 100], [Num + 1000]} end).
+}}}
+
+This will return the same values as before (each item + 1000) but also replaces the existing value with the old value + 100. Now running the same map operation will return each value incremented by 100, and will also increment the items on the data nodes again by 100. Note that the replace and return items in the return tuple are lists, so you are able to give an empty list (which deletes the item or returns no items), or can even replace or return with multiple items. For example:
+
+{{{
+dmr:map(fun (Num) -> {[Num,Num], []} end)
+}}}
+
+This will duplicate all items in the system, which results in twice as many items overall. Also, since the return value is `[]` (the empty list), it will not return anything to the calling process.
+
+The map_reduce variants allow for a reduce function to be run on the resulting data set at each remote node before returning result to the calling process. This is especially useful for aggregate operations like summing up numbers. For example:
+
+{{{
+dmr:map_reduce(fun (Num) -> {[Num]} end,
+               fun (Results) -> [lists:sum(Results)] end).
+}}}
+
+The map function will simply return the value, and then the reduce function will return a sum of values. This results in the calling process returning a list, where each item in the list is the sum of numbers from a particular node. This can then be passed into a `lists:sum()` in the calling process to obtain the overall sum of numbers in the system.
 
 * 2.2 Client Details *
 
-A number of the client functions are built upon others to reduce the amount of core code. At the heart of most calls is one of `call_one`, `cast_one`, or `cast_all`. The `_one` variants, used by the add functions, grab one server process ID from a list associated with the globally registered process group name `dmr`. This is chosen in a round robin fashion using state kept in the `dmr_counter`. The `cast_all` function, used by map and delete functions, will send the request to all process IDs associated with the global process group name. There is also a `recv_all` call that waits to receive a message from each process to which `cast_all` set a request to. This is the calling process aggregator which keeps the data to be returned to the calling function.
+A number of the client functions are built upon others to reduce the amount of core code. Most of the public functions construct request tuples and call one of `call_one`, `cast_one`, or `cast_all`. The `_one` variants, used by the add functions, grab one server process ID from a list associated with the globally registered process group name `dmr`. This process group represents all active server nodes than can handle requests. A single process is chosen in a round robin fashion using state kept in the `dmr_counter` server. The `cast_all` function, used by map and delete functions, will send the request to all process IDs associated with the global process group name. When using `cast_all`, there is also a `recv_all` call that can wait to receive a reply message from each process a request was sent to. This is used by the map function to gather results from each node, and will then pass the list of results back to the calling function.
 
 * 2.3 Server Interface *
 
-The server interface consists of a message passing interface provided by the `gen_server` module. It allows for both asynchronous (through `gen_server:cast()`) and synchronous (through `gen_server:call`) messages to be passed. The message handlers are defined as `handle_cast` and `handle_call` in the `dmr_server.erl` file. The messages supported consist of tuples specifying the operation and arguments. It currently supports:
+The server interface consists of receiving messages through the message passing interface provided by the `gen_server` module. It allows for both asynchronous and synchronous calls to be passed using `gen_server:cast()` and `gen_server:call` respectively. The message handlers are defined as `handle_cast` and `handle_call` in the `dmr_server.erl` file. The messages supported consist of tuples specifying the desired operation and any arguments. It currently supports:
 
 {{{
 {add, Data}
@@ -114,13 +131,13 @@ The server interface consists of a message passing interface provided by the `ge
 {map_reduce, From, Args, Map, Reduce}
 }}}
 
-The `add` operation adds the item `Data` to the nodes data set. The `map` operation runs the given `Map` function on each data item, with the optional `Args` parameter if given. The results will be returned directly. The `map_reduce` operator works just like `map`, but will also run the results of `map` through the given `Reduce` function before sending the data back to the calling process. All other message are simply ignored.
+The `add` operation adds the item `Data` to the data set on the receiving node. The `map` operation runs the given `Map` function on each data item on the node, with the optional `Args` parameter if given. The results will be returned directly. The `map_reduce` operator works just like `map`, but will also run the results of `map` through the given `Reduce` function before sending the data back to the calling process. All other message are simply ignored.
 
 * 2.4 Server Details *
 
-There is a `State` variable associated with each gen_server instance, and this is currently the list of data items held for each node. The `add` operator will add the given `Data` item to this state list by returning `[Data | State]` as the new state value.
+There is a `State` variable associated with each `gen_server` instance, and this is currently the list of data items held for each node. The `add` operator will add a given `Data` item to this state list by returning `[Data | State]` as the new state value.
 
-The `map` and `map_reduce` operators use the state variable for their input. They both call an instance of the `run_map` function to iterate over each item in the `State` list, possibly removing the item or adding to it (depending on the return value of the `map` function). The `run_map` function expects one of two possible returns values from the given `Map` function. The value in a single element tuple is added to the result list. If a two element tuple is returned, the first element is the replacement value for the current data item, and the second is the return value. Any other return value from `Map` is ignored, and neither the data set nor return set are modified.
+The `map` and `map_reduce` operators use the state variable for their input. They both call an instance of the `run_map` function to iterate over each item in the `State` list, possibly removing the item or adding to it (depending on the return tuple of the `Map` function). The `run_map` function expects one of two possible returns values from the given `Map` function. If the value is a single element tuple, the list is concatenated to the result list. If a two element tuple is returned, the first list is concatenated with the old `State` replacing the existing value, and the second list is again the return value for the calling process. Any other return value from `Map` is ignored, and neither the data set nor return list are modified.
 
 The new data set and list of results accumulated throughout the `run_map` execution is eventually returned. The final result list is then run through the `Reduce` function if given. The return value of the `handle_cast` and `handle_call` calls indicate a reply (if any) and the new `State` variable representing the data set for the node.
 
