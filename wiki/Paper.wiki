@@ -92,7 +92,9 @@ This will duplicate all items in the system, which results in twice as many item
 
 The map_reduce variants allow for a reduce function to be run on the resulting data set at the remote node before returning result to the calling process. This is especially useful for aggregate operations like summing up numbers. For example:
 
-`dmr:map_reduce(fun (Num) -> {[Num]} end, fun (Results) -> [lists:sum(Results)] end).`
+{{{
+dmr:map_reduce(fun (Num) -> {[Num]} end, fun (Results) -> [lists:sum(Results)] end).
+}}}
 
 This will return a list which represents the sum of items on each data node. This can then be passed into a `lists:sum()` in the calling process to obtain the overall sum of items in the system.
 
@@ -104,11 +106,13 @@ A number of the client functions are built upon others to reduce the amount of c
 
 The server interface consists of a message passing interface provided by the `gen_server` module. It allows for both asynchronous (through `gen_server:cast()`) and synchronous (through `gen_server:call`) messages to be passed. The message handlers are defined as `handle_cast` and `handle_call` in the `dmr_server.erl` file. The messages supported consist of tuples specifying the operation and arguments. It currently supports:
 
-`{add, Data}`
-`{map, From, Map}`
-`{map, From, Args, Map}`
-`{map_reduce, From, Map, Reduce}`
-`{map_reduce, From, Args, Map, Reduce}`
+{{{
+{add, Data}
+{map, From, Map}
+{map, From, Args, Map}
+{map_reduce, From, Map, Reduce}
+{map_reduce, From, Args, Map, Reduce}
+}}}
 
 The `add` operation adds the item `Data` to the nodes data set. The `map` operation runs the given `Map` function on each data item, with the optional `Args` parameter if given. The results will be returned directly. The `map_reduce` operator works just like `map`, but will also run the results of `map` through the given `Reduce` function before sending the data back to the calling process. All other message are simply ignored.
 
