@@ -30,6 +30,8 @@ One major simplification made in this implementation is not requiring an underly
 
 Another simplification is not supporting distribution of map and reduce functions on a particular partition of the data set. Both the map and reduce functions will be executed on the same node. While this requires more processing to be done on each node, it reduces the potential network latency for shuffling data between nodes for processing. Related to this is that there is no master node coordinating the map and reduce tasks across all nodes. This means if a particular node should fail the job will not be restarted. This is also something that can be added easily at a later time if needed.
 
+http://oddments.org/gcode/dmr.png
+
 * 1.2 Functional Roots *
 
 As mentioned before, the map and reduce function concept comes from the core set of functions for functional languages. Many other language constructs can built upon these. For example, in Erlang, the statement:
