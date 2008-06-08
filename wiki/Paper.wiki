@@ -32,6 +32,8 @@ Another simplification is not supporting distribution of map and reduce function
 
 http://oddments.org/gcode/dmr.png
 
+*_Figure 1: Simplified Map/Reduce Model_*
+
 * 1.2 Functional Roots *
 
 As mentioned before, the map and reduce function concept comes from the core set of functions for functional languages. Many other language constructs can built upon these. For example, in Erlang, the statement:
@@ -144,6 +146,60 @@ The `map` and `map_reduce` operators use the state variable for their input. The
 The new data set and list of results accumulated throughout the `run_map` execution is eventually returned. The final result list is then run through the `Reduce` function if given. The return value of the `handle_cast` and `handle_call` calls indicate a reply (if any) and the new `State` variable representing the data set for the node.
 
 === 3 Testing: Numerical Computation ===
+
+In this section we will look at a few simple numerical applications to get a better idea of how the system works. This should also show how traditional algorithms need to be modified to work within this programming model. We begin by first starting up a four-node system by using the supplied start script and loading the system with one million numbers. To load 1 million integers, run:
+
+{{{
+# ./start
+Erlang (BEAM) emulator version 5.5.1 [source] [async-threads:0] [hipe]
+Eshell V5.5.1  (abort with ^G)
+(d@local)1> dmr_test:num_load(1000000).
+ok
+(d@local)2> dmr:stat().
+[{a@local,250000},{b@local,250000},{c@local,250000},{d@local,250000}]
+}}}
+
+The `dmr_test:num_load` function will actually load the data, and the second `dmr:stat` call returns how many data items are loaded on each node. As you can see there are four nodes running, each with an equal partition of the data due to the round-robin data loading. To increase the number of integers in the system and get some slightly more interesting values, we now run a custom map function to double the number and add some random offsets:
+
+{{{
+(d@local)3> dmr:map(fun (X) -> {[X + 8475, X + 42], []} end).
+[]
+(d@local)4> dmr:stat().                                      
+[{d@local,500000},{b@local,500000},{c@local,500000},{a@local,500000}]
+}}}
+
+The supplied map function returned two new data items to replace the single given item with, each with some other integer value added to them. The second stat call verifies the number of items did indeed double. To get the sum of all numbers within the system, we run:
+
+{{{
+num_sum() ->
+    lists:sum(dmr:map_reduce(
+        fun (Num) -> {[Num]} end,
+        fun (Results) -> [lists:sum(Results)] end)).
+}}}
+
+This function is defined in the `dmr_test` module. The `num_avg` and `num_avg_sqrt`, which are defined in a similar way to `num_sum`, are also defined in this module. These functions return the average of all numbers, and the average of the square root of all numbers, respectively. When run, we get the expected return values:
+
+{{{
+(d@local)5> dmr_test:num_sum().
+1008518000000
+(d@local)6> dmr_test:num_avg().
+5.04259e+5
+(d@local)7> dmr_test:num_avg_sqrt().
+670.674
+}}}
+
+These functions demonstrate how much of the computation can happen local to where the data resides through the supplied reduce function. The calling process receives back only the required information to finish the calculation, such as the sum of each node, and then all those values are summed to get the total system sum. The `num_avg` and `num_avg_sqrt` functions work in a similar way.
+
+Sorting presents a different type of problem, since this requires returning a large data set to the calling process. Most of the heavy computation can still be distributed to each of the nodes by using a variant of the merge sort algorithm. Each remote data node will perform a local sort of the data items it holds and then return this sorted list to the calling process. The calling process can then perform the last step of the merge sort by repeatedly taking the lowest value from the head of each returned list, returning the final sorted list. The `dmr_test:num_sort` function demonstrates this:
+
+{{{
+(d@local)8> dmr_test:num_sort().
+[43, 44, 45, ...]
+(d@local)9> dmr_test:sort_verify(dmr_test:num_sort()).
+true
+}}}
+
+It may be useful to look at the code for `num_sort` and the auxiliary function `merge_sort` in the `dmr_test` module to fully understand the implementation. The supplied `sort_verify` will take a list of numbers and verify if it sorted or not. Simple verification functions such as this are useful when working with large data sets.
 
 === 4 Testing: Database Application ===
 
