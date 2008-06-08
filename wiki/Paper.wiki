@@ -54,11 +54,55 @@ Erlang also provides an easy way for distributed nodes to connect to one another
 
 === 2 Implementation ===
 
+This project follows the OTP design framework provided by the Erlang runtime system. More specifically, it uses the application, supervisor, and gen_server behaviors. Using these as the core server allowed for a quick, robust client-server framework, along with following common design principles so other developers can follow the source. The `dmr.app` file describes the runtime configuration parameters so a single node can be started by running:
+
+`erl -sname <node name> -s dmr`
+
+This triggers the application behavior by run `dmr:start()` in `dmr.erl`. The supervisor behavior will then start on top of this, creating two additional processes. One process will use `dmr_server.erl` which contains a request handler for the map and reduce requests, and the other process will start a simple counter server in `dmr_counter.erl` to enable round-robin distribution when adding data.
+
 * 2.1 Client Interface *
 
-* 2.2 Server Interface *
+The client interface is defined in `dmr.erl`. It consists of a an interface to add and delete data from the system, run a map function over the data in the system, or run a map and reduce function in the system. For each of the map and map_reduce functions, you may specify an optional process ID to send results to, or an argument to pass into the map function when called. There is also a stat function to grab the number of items held on each node in the system.
 
-* 2.3 Server Details *
+To add the number '42' as a data item in the system, you would run:
+
+`dmr:add(42).`
+
+This will wait until the server process that handles the request has added the data and responds. If you simply want to send the request but not wait for a reply, you can use:
+
+`dmr:add_fast(43).`
+
+This will return immediately with no guarantee the server process completed. This function is useful when bulk loading data for testing. To see how many items have been loaded into the system, you can run:
+
+`dmr:stat().`
+
+Which will return a list of `{node name,count}` pairs for each node in the system. To run a map function on the data in the system, you can run:
+
+`dmr:map(fun (Num) -> {[Num + 1000]} end).`
+
+This will run a function which returns each item plus 1000 back to the calling process. We can also replace the existing values while returning a value by returning a two-tuple from our map function. The first is the new item value, and the second is the value to return to the process. For example:
+
+`dmr:map(fun (Num) -> {[Num + 100], [Num + 1000]} end).`
+
+This will return the same values as before (each item + 1000) but also replaces the existing value with the old value + 100. Now running the same map operation will return each value incremented by 100 (and also increments the item on the data node by another 100). Note that the replace and return items in the return tuple are lists, so you are able to give an empty list (which deletes the item or returns the item), or can even replace or return with multiple items. For example:
+
+`dmr:map(fun (Num) -> {[Num,Num], []} end)`
+
+This will duplicate all items in the system, which results in twice as many items overall. Also, since the return value is `[]`, it will not return anything to the calling process.
+
+The map_reduce variants allow for a reduce function to be run on the resulting data set at the remote node before returning result to the calling process. This is especially useful for aggregate operations like summing up numbers. For example:
+
+`dmr:map_reduce(fun (Num) -> {[Num]} end, fun (Results) -> [lists:sum(Results)] end).`
+
+This will return a list which represents the sum of items on each data node. This can then be passed into a `lists:sum()` in the calling process to obtain the overall sum of items in the system.
+
+* 2.2 Client Details *
+
+A number of the client functions are built upon others to reduce the amount of core code. At the heart of most calls is one of `call_one`, `cast_one`, or `cast_all`. The `_one` variants, used by the add functions, grab one server process ID from a list associated with the globally registered process group name `dmr`. This is chosen in a round robin fashion using state kept in the `dmr_counter`. The `cast_all` function, used by map and delete functions, will send the request to all process IDs associated with the global process group name. There is also a `recv_all` call that waits to receive a message from each process to which `cast_all` set a request to. This is the calling process aggregator which keeps the data to be returned to the calling function.
+
+* 2.3 Server Interface *
+
+* 2.4 Server Details *
 
 === 3 Testing: Numerical Computation ===
 
