@@ -16,24 +16,49 @@ The model used here uses two core ideas provided by functional languages: map an
 
 This implementation leverages many of the features functional languages provide to ease in deployment and testing. Treating functions as a first class object (or variables) is one of the key components to constructing quick tests and getting feedback since it allows you to define your function on the fly. You also have the built-in functions (bifs) and standard runtime modules within Erlang at your disposal when constructing your map and reduce functions. All code and supporting documentation for this project can be found at the URL given at the top of this paper.
 
-
 === 1 Introduction ===
+
+While doing research on the various programming models for parallel and distributed computation systems, I began to think about ways that these ideas could be brought to more common applications. I was also not able to find a simple system that could be setup in a short amount that would allow me to test these ideas and write some prototype applications. One specific application I had in mind was looking at ways to implement the functionality of a traditional database management system (DBMS) on such a programming model, which is explored further in section 4.
+
+This project aims to be a simple implementation of this distributed, parallel programming model that will allow people to get setup quickly so they can begin building their own prototypes without excessive overhead. Being based on a functional language brings all the benefits of functional language development such as fast development time, succinct code, and improved program correctness. Currently Erlang `[2]` is the only way to interface with the system, but the ability to interface with other languages is discussed as a possible improvement in section 6.5.
 
 * 1.1 Simplified Model *
 
-One major simplification made in this implementation is not requiring an underlying global filesystem. The Google implementation is built upon their own file system (GFS) `[2]` which provides fast data access and fault-tolerance. The implementation described in this paper only deals with application level RAM-based storage, but persistent solutions are discussed in section 6. Not requiring a specific underlying filesystem allows for faster deployment due to less dependencies and the ability to start nodes any system with the Erlang runtime system.
+This implementation focuses on the core of the programming model, and removes many of the robust and fault-tolerant features discussed in Google's implementation. This allowed for faster initial development, but these features may be added at a later time if needed.
+
+One major simplification made in this implementation is not requiring an underlying global filesystem. The Google implementation is built upon their own file system (GFS) `[3]` which provides fast data access and fault-tolerance. The implementation described in this paper only deals with application level RAM-based storage, but persistent solutions are discussed in section 6.1. Not requiring a specific underlying filesystem allows for faster deployment due to less dependencies and the ability to start nodes any system with the Erlang runtime system.
+
+Another simplification is not supporting distribution of map and reduce functions on a particular partition of the data set. Both the map and reduce functions will be executed on the same node. While this requires more processing to be done on each node, it reduces the potential network latency for shuffling data between nodes for processing. Related to this is that there is no master node coordinating the map and reduce tasks across all nodes. This means if a particular node should fail the job will not be restarted. This is also something that can be added easily at a later time if needed.
 
 * 1.2 Functional Roots *
 
+As mentioned before, the map and reduce function concept comes from the core set of functions for functional languages. Many other language constructs can built upon these. For example, in Erlang, the statement:
+
+`lists:map(fun (X) -> X * 2 end, [1,2,3,4,5]).`
+
+Will return the list `[2,4,6,8,10]`. As you can see, the function returns the value of the input returned by two, and this is applied to each element of the list.
+
+The reduce function, also commonly known as fold, takes a function, a list, and an initial value as argument to generate some final result. For example, to sum a list of numbers, you can use:
+
+`lists:foldr(fun (X, Sum) -> X + Sum end, 0, [1,2,3,4,5]).`
+
+This returns the value `15`. The idea is to now take these basic building blocks and produce a system where the lists are very large, that data within the lists are persistent, and so that the functions can run on partitions of these lists in parallel across many nodes.
+
+An important concept used here is the ability to pass entire functions as arguments, and not just references (like function pointers in C). This idea is not unique to functional languages, but it is a necessary feature and is often referred to as a functional language concept. This is especially important when dealing with distributed nodes since the function may actually be passed over a network and remotely executed. Using this ability of functional languages makes development fast, since you can create them on the fly rather than having to push a code module to all nodes before being able to execute it.
+
 * 1.3 Why Erlang *
+
+Erlang was natural choice to use to implement this project for a number of reasons. Beyond being functional, Erlang was written to provide a robust, distributed runtime environment. Processes within Erlang can communicate with each other using a simple asynchronous message passing interface. The message passing is not restricted to processes within a single node either, they may be in another node, possibly on a separate physical machine. This provides an easy to use framework for building distributed applications.
+
+Erlang also provides an easy way for distributed nodes to connect to one another and, once connected, for certain processes to create and join globally named process groups (using the pg2 module). I also leveraged some components of the Open Telecom Platform (OTP) to speed up the initial development of the server. By building on all of these existing components, only a couple hundred lines of code needed to be written to get the core functionality working.
 
 === 2 Implementation ===
 
-* 2.2 Client Interface *
+* 2.1 Client Interface *
 
-* 2.1 Server Interface *
+* 2.2 Server Interface *
 
-* 2.4 Server Details *
+* 2.3 Server Details *
 
 === 3 Testing: Numerical Computation ===
 
@@ -41,9 +66,9 @@ One major simplification made in this implementation is not requiring an underly
 
 === 5 Performance ===
 
-* 5.1 One Node *
+* 5.1 Single Node *
 
-* 5.2 One Machine *
+* 5.2 Single Machine *
 
 * 5.3 Three Machines *
 
@@ -57,13 +82,13 @@ File Scan (dets), B-Tree, Mnesia (get replication)
 
 * 6.2 Redundancy *
 
-* 6.3 Isolated Databases *
+* 6.3 Isolated Data Sets *
 
 * 6.4 Access Control Lists *
 
 * 6.5 External Interfaces *
 
-TCP, Send code as query, compile, map, other lang bindings
+erlang port, TCP, Send code as query, compile, map, other lang bindings
 
 === 7 Conclusion ===
 
@@ -73,6 +98,8 @@ TCP, Send code as query, compile, map, other lang bindings
 
 [1] Jeffrey Dean and Sanjay Ghemawat. MapReduce: Simplified Data Processing on Large Clusters. http://labs.google.com/papers/mapreduce.html.
 
-[2] Sanjay Ghemawat, Howard Gobioff, and Shun-Tak Leung. The Google File System. http://labs.google.com/papers/gfs.html.
+[2] Erlang. http://erlang.org/.
+
+[3] Sanjay Ghemawat, Howard Gobioff, and Shun-Tak Leung. The Google File System. http://labs.google.com/papers/gfs.html.
 
 }}}
