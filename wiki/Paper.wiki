@@ -56,7 +56,7 @@ Erlang also provides an easy way for distributed nodes to connect to one another
 
 This project follows the OTP design framework provided by the Erlang runtime system. More specifically, it uses the application, supervisor, and gen_server behaviors. Using these as the core server allowed for a quick, robust client-server framework, along with following common design principles so other developers can follow the source. The `dmr.app` file describes the runtime configuration parameters so a single node can be started by running:
 
-`erl -sname <node name> -s dmr`
+`erl -sname mynode -s dmr`
 
 This triggers the application behavior by run `dmr:start()` in `dmr.erl`. The supervisor behavior will then start on top of this, creating two additional processes. One process will use `dmr_server.erl` which contains a request handler for the map and reduce requests, and the other process will start a simple counter server in `dmr_counter.erl` to enable round-robin distribution when adding data.
 
@@ -102,7 +102,23 @@ A number of the client functions are built upon others to reduce the amount of c
 
 * 2.3 Server Interface *
 
+The server interface consists of a message passing interface provided by the `gen_server` module. It allows for both asynchronous (through `gen_server:cast()`) and synchronous (through `gen_server:call`) messages to be passed. The message handlers are defined as `handle_cast` and `handle_call` in the `dmr_server.erl` file. The messages supported consist of tuples specifying the operation and arguments. It currently supports:
+
+`{add, Data}`
+`{map, From, Map}`
+`{map, From, Args, Map}`
+`{map_reduce, From, Map, Reduce}`
+`{map_reduce, From, Args, Map, Reduce}`
+
+The `add` operation adds the item `Data` to the nodes data set. The `map` operation runs the given `Map` function on each data item, with the optional `Args` parameter if given. The results will be returned directly. The `map_reduce` operator works just like `map`, but will also run the results of `map` through the given `Reduce` function before sending the data back to the calling process. All other message are simply ignored.
+
 * 2.4 Server Details *
+
+There is a `State` variable associated with each gen_server instance, and this is currently the list of data items held for each node. The `add` operator will add the given `Data` item to this state list by returning `[Data | State]` as the new state value.
+
+The `map` and `map_reduce` operators use the state variable for their input. They both call an instance of the `run_map` function to iterate over each item in the `State` list, possibly removing the item or adding to it (depending on the return value of the `map` function). The `run_map` function expects one of two possible returns values from the given `Map` function. The value in a single element tuple is added to the result list. If a two element tuple is returned, the first element is the replacement value for the current data item, and the second is the return value. Any other return value from `Map` is ignored, and neither the data set nor return set are modified.
+
+The new data set and list of results accumulated throughout the `run_map` execution is eventually returned. The final result list is then run through the `Reduce` function if given. The return value of the `handle_cast` and `handle_call` calls indicate a reply (if any) and the new `State` variable representing the data set for the node.
 
 === 3 Testing: Numerical Computation ===
 
@@ -138,12 +154,8 @@ erlang port, TCP, Send code as query, compile, map, other lang bindings
 
 === References ===
 
-{{{
+`[1]` Jeffrey Dean and Sanjay Ghemawat. !MapReduce: Simplified Data Processing on Large Clusters. http://labs.google.com/papers/mapreduce.html.
 
-[1] Jeffrey Dean and Sanjay Ghemawat. MapReduce: Simplified Data Processing on Large Clusters. http://labs.google.com/papers/mapreduce.html.
+`[2]` Erlang. http://erlang.org/.
 
-[2] Erlang. http://erlang.org/.
-
-[3] Sanjay Ghemawat, Howard Gobioff, and Shun-Tak Leung. The Google File System. http://labs.google.com/papers/gfs.html.
-
-}}}
+`[3]` Sanjay Ghemawat, Howard Gobioff, and Shun-Tak Leung. The Google File System. http://labs.google.com/papers/gfs.html.
