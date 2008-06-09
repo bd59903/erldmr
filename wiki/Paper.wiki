@@ -249,9 +249,11 @@ The first query gets an inventory count of all the apples in all stores. The Sec
 We can also do sorting queries much like we did in the numerical example. This is shown with the `dmr_test:db_inventory` function by projecting out the interesting fields from the item in the map function, sorting this in the reduce function, and then merging those sorted lists from each data node in the calling process. This will give a complete, sorted inventory list for a given grocer name.
 
 {{{
-(d@host)6> dmr_test:sort_verify(dmr_test:db_inventory("New Seasons")).     
+(d@host)6> dmr_test:sort_verify(
+               dmr_test:db_inventory("New Seasons")).     
 true
-(d@host)7> lists:sublist(dmr_test:db_inventory("New Seasons"), 178, 4). 
+(d@host)7> lists:sublist(
+               dmr_test:db_inventory("New Seasons"), 178, 4). 
 [{"Apricot",true,3.99000,8089,34},
  {"Apricot",true,3.99000,9321,96},
  {"Blackcurrant",false,0.490000,57,344},
@@ -267,7 +269,8 @@ One more example to consider is when the data items need to be modified. We defi
 {{{
 (d@host)9> dmr_test:db_buy("Apricot", "New Seasons", 10).              
 3124.50
-(d@host)10> lists:sublist(dmr_test:db_inventory("New Seasons"), 178, 4).
+(d@host)10> lists:sublist(
+                dmr_test:db_inventory("New Seasons"), 178, 4).
 [{"Apricot",true,3.99000,8089,24},
  {"Apricot",true,3.99000,9321,86},
  {"Blackcurrant",false,0.490000,57,344},
@@ -278,17 +281,41 @@ Note that this function will purchase 10 apricots from each row that matches the
 
 There are many other operations within a database management system that are not demonstrated here for brevity, but may still be possible. For example, a grouping operator could be done with a simple customer aggregator function. More advanced features like joins would require secondary messages to be passed among the data nodes. For example, the left input of a join may search for all matching tuples in the list, and then the result list could be sent off to data nodes holding entries for the right input. The matching could then be done on each of those nodes and the final result sent to the calling process. This type of message passing is currently not supported, but could be with some minor modifications.
 
-There are also synchronization and atomicity issues to deal with, but this may not be important depending on the application. When these issues are important, there are a solutions out there for dealing with these issues such as global locking systems. New solutions for this particular kind of programming model may also be possible. The purpose of this section is to present some basic examples and operators that complex systems can be built on.
+There are also synchronization and atomicity issues to deal with, but this may not be important depending on the application. When these issues are important, there are a number of solutions out there for dealing with these issues such as global locking systems. New solutions for this particular kind of programming model may also be possible. The purpose of this section is to present some basic examples and operators that complex systems can be built on.
 
 === 5 Performance ===
 
-* 5.1 Single Node *
+To understand the performance benefits that this storage and query model offers, we now use some of the example functions above to test the system. These queries are run on three different node configurations: one node running on one machine, four nodes running on one machine, and four nodes each running on three machines (12 total nodes). The machines used to perform these tests are running Linux, each have two quad-core processors, and have enough RAM to hold the entire data sets so no disk swapping is encountered. Each machine is connected in a LAN using 100MB ethernet so latency is negligible. Even thought the machines were idle during testing, multiple executions of each query type were run to filter out any anomalies and unexpected system load. All times are shown in milliseconds.
 
-* 5.2 Single Machine *
+* 5.1 Numerical Tests
 
-* 5.3 Three Machines *
+For the numerical tests there were 20 million entries loaded into each system configuration. The following functions defined in `dmr_test` were run:
 
-* 5.4 Many Machines *
+|| Query || 1-Node || 4-Node || 3X4-Node ||
+|| num_sum || 7814 || 1701 || 638 ||
+|| num_avg_sqrt || 11070 || 2277 || 840 ||
+|| num_sort || 7421 || 5080 || 7574 ||
+
+*_Table 1: Numerical query times (in ms) for each node configuration_*
+
+As expected, the more computation heavy processes ran much faster with an increased number of nodes. The multi-node results for `num_sort` are not surprising since each data node must send a large list of sorted integers back to the calling process. This yields a faster time in the 4-Node configuration, but once the nodes span a physical network, the network transfer times become significant. While the query may be slower overall, the computation cost of sorting is still distributed among all nodes.
+
+* 5.2 Database Tests
+
+For the database tests there were two million entries loaded into each system configuration. The following functions defined in `dmr_test` were run:
+
+|| Query || 1-Node || 4-Node || 3X4-Node ||
+|| db_count || 423 || 172 || 69 ||
+|| db_inventory || 5115 || 4014 || 1649 ||
+|| db_buy || 9362 || 3602 || 118 ||
+
+*_Table 2: Database query times (in ms) for each node configuration_*
+
+Again, we see significant improvements in query times as more nodes are added. In this case, the `db_inventory` query time still improves when the nodes span physical machines. This is most likely due to the fact that the data set being returned is smaller than the data in the numerical example (there are less overall data items and the query is selective).
+
+* 5.3 Larger Node Sets
+
+It is important to mention that this type of scalability will eventually hit some limit. As the Google !MapReduce paper explains, a significant amount of time is spent starting up jobs on the system when using 1,800 nodes. The system described in this paper would most likely suffer from the same type of startup delay if run on that large of a node set. To mitigate these issues, the nodes could be configured with another level of node groups so that the calling process would initially send the request to a number of relay processes, each of which is connected to a separate group of nodes. This tree structure would prevent a single process from having to coordinate with too many data nodes. If an application has multiple types of data sets, it could also choose to only use a certain set of nodes for each data set type. Many other types of node grouping and data partitioning could be used to accommodate a large number of nodes.
 
 === 6 Improvements ===
 
