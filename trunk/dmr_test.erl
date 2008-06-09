@@ -22,7 +22,7 @@
 -module(dmr_test).
 -export([num_load/1, num_sum/0, num_avg/0, num_avg_sqrt/0, num_sort/0]).
 -export([db_load/1, db_count/1, db_avg_price/1, db_low_price/1]).
--export([db_inventory/1, db_inventory_value/1]).
+-export([db_inventory/1, db_inventory_value/1, db_buy/3]).
 -export([sort_verify/1]).
 
 %
@@ -137,6 +137,16 @@ db_inventory_value(Grocer) ->
         end,
         fun (Results, _) -> [lists:sum(Results)] end,
         Grocer)).
+
+% buy some quantity of fruit a given from from grocer
+db_buy(Name, Grocer, Quantity) ->
+    lists:sum(dmr:map_reduce_args(
+        fun ({Id, N, P, Q, G, O, D}, {N, G, BuyQ}) when BuyQ =< Q ->
+                {[{Id, N, P, Q - BuyQ, G, O, D}], [P * BuyQ]};
+            (_, _) -> ok
+        end,
+        fun (Results, _) -> [lists:sum(Results)] end,
+        {Name, Grocer, Quantity})).
 
 %
 % helper functions
