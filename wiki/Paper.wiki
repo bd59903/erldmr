@@ -147,28 +147,28 @@ The new data set and list of results accumulated throughout the `run_map` execut
 
 === 3 Testing: Numerical Computation ===
 
-In this section we will look at a few simple numerical applications to get a better idea of how the system works. This should also show how traditional algorithms need to be modified to work within this programming model. We begin by first starting up a four-node system by using the supplied start script and loading the system with one million numbers. To load 1 million integers, run:
+In this section we will look at a few simple numerical applications to get a better idea of how the system works. This should also show how traditional algorithms need to be modified to work within this programming model. We begin by first starting up a four-node system by using the supplied start script and loading the system with one million numbers.
 
 {{{
 # ./start
-Erlang (BEAM) emulator version 5.5.1 [source] [async-threads:0] [hipe]
+Erlang (BEAM) emulator version 5.5.1
 Eshell V5.5.1  (abort with ^G)
-(d@local)1> dmr_test:num_load(1000000).
+(d@host)1> dmr_test:num_load(1000000).
 ok
-(d@local)2> dmr:stat().
-[{a@local,250000},{b@local,250000},{c@local,250000},{d@local,250000}]
+(d@host)2> dmr:stat().
+[{a@host,250000},{b@host,250000},{c@host,250000},{d@host,250000}]
 }}}
 
 The `dmr_test:num_load` function will actually load the data, and the second `dmr:stat` call returns how many data items are loaded on each node. As you can see there are four nodes running, each with an equal partition of the data due to the round-robin data loading. To increase the number of integers in the system and get some slightly more interesting values, we now run a custom map function to double the number and add some random offsets:
 
 {{{
-(d@local)3> dmr:map(fun (X) -> {[X + 8475, X + 42], []} end).
+(d@host)3> dmr:map(fun (X) -> {[X + 8475, X + 42], []} end).
 []
-(d@local)4> dmr:stat().                                      
-[{d@local,500000},{b@local,500000},{c@local,500000},{a@local,500000}]
+(d@host)4> dmr:stat().                                      
+[{d@host,500000},{b@host,500000},{c@host,500000},{a@host,500000}]
 }}}
 
-The supplied map function returned two new data items to replace the single given item with, each with some other integer value added to them. The second stat call verifies the number of items did indeed double. To get the sum of all numbers within the system, we run:
+The supplied map function returned two new data items to replace the single given item, each with a different integer value added to them. The second stat call verifies the number of items did indeed double. To get the sum of all numbers within the system, we run:
 
 {{{
 num_sum() ->
@@ -177,31 +177,108 @@ num_sum() ->
         fun (Results) -> [lists:sum(Results)] end)).
 }}}
 
-This function is defined in the `dmr_test` module. The `num_avg` and `num_avg_sqrt`, which are defined in a similar way to `num_sum`, are also defined in this module. These functions return the average of all numbers, and the average of the square root of all numbers, respectively. When run, we get the expected return values:
+This function is defined in the `dmr_test` module. The `num_avg` and `num_avg_sqrt` functions, which are defined in a similar way to `num_sum`, are also defined in this module. These functions return the average of all the numbers, and the average of the square root of all numbers, respectively. When run, we get the expected return values:
 
 {{{
-(d@local)5> dmr_test:num_sum().
+(d@host)5> dmr_test:num_sum().
 1008518000000
-(d@local)6> dmr_test:num_avg().
+(d@host)6> dmr_test:num_avg().
 5.04259e+5
-(d@local)7> dmr_test:num_avg_sqrt().
+(d@host)7> dmr_test:num_avg_sqrt().
 670.674
 }}}
 
 These functions demonstrate how much of the computation can happen local to where the data resides through the supplied reduce function. The calling process receives back only the required information to finish the calculation, such as the sum of each node, and then all those values are summed to get the total system sum. The `num_avg` and `num_avg_sqrt` functions work in a similar way.
 
-Sorting presents a different type of problem, since this requires returning a large data set to the calling process. Most of the heavy computation can still be distributed to each of the nodes by using a variant of the merge sort algorithm. Each remote data node will perform a local sort of the data items it holds and then return this sorted list to the calling process. The calling process can then perform the last step of the merge sort by repeatedly taking the lowest value from the head of each returned list, returning the final sorted list. The `dmr_test:num_sort` function demonstrates this:
+Sorting presents a different type of problem since this requires returning a large data set to the calling process. Most of the heavy computation can still be distributed to each of the nodes by using a variant of the merge sort algorithm. Each remote data node will perform a local sort of the data items it holds and then return this sorted list to the calling process. The calling process can then perform the last step of the merge sort by repeatedly taking the lowest value from the head of each returned list and returning the final sorted list. The `dmr_test:num_sort` function demonstrates this:
 
 {{{
-(d@local)8> dmr_test:num_sort().
+(d@host)8> dmr_test:num_sort().
 [43, 44, 45, ...]
-(d@local)9> dmr_test:sort_verify(dmr_test:num_sort()).
+(d@host)9> dmr_test:sort_verify(dmr_test:num_sort()).
 true
 }}}
 
-It may be useful to look at the code for `num_sort` and the auxiliary function `merge_sort` in the `dmr_test` module to fully understand the implementation. The supplied `sort_verify` will take a list of numbers and verify if it sorted or not. Simple verification functions such as this are useful when working with large data sets.
+It may be useful to look at the code for `dmr_test:num_sort` and the Erlang documentation for `lists:merge` to fully understand the implementation. The supplied `dmr_test:sort_verify` function will take a list of numbers and verify if it sorted or not. Simple verification functions such as this are useful when testing with large data sets.
 
 === 4 Testing: Database Application ===
+
+In this section we will explore a more complex example by building a simple database application. Rather than storing simple integers as the data items, we will be storing tuples which represent rows in a traditional database. Rather than using a query language such as SQL, we will be hand crafting our queries with map and reduce functions. The `dmr_test` file contains the load function for the sample data as well as a number of queries we can make on that data. The schema we will be looking at will be:
+
+_Fruit Inventory Table_
+
+|| Id || Name || Price || Quantity || Grocer || Organic || Description ||
+
+We begin by loading ten thousand entries of some sample data using `dmr_test:db_load(10000)`.
+
+{{{
+# ./start
+Erlang (BEAM) emulator version 5.5.1
+Eshell V5.5.1  (abort with ^G)
+(d@host)1> dmr_test:db_load(10000).
+ok
+(d@host)2> dmr:stat().
+[{c@host,2500},{b@host,2500},{a@host,2500},{d@host,2500}]
+}}}
+
+With the data loaded, we experiment with some sample queries. In order to get an inventory count of a particular kind of fruit we match on a given name and return the quantity. To make the query interface somewhat dynamic, we define `dmr_test:db_count` to take the name and return the sum of the `Quantity` fields in the system matching that name. The code to do this is:
+
+{{{
+db_count(Name) ->
+    lists:sum(dmr:map_reduce_args(
+        fun ({_, N, _, Q, _, _, _}, N) -> {[Q]};
+            (_, _) -> ok
+        end,
+        fun (Results, _) -> [lists:sum(Results)] end,
+        Name)).
+}}}
+
+This is the first example of `dmr:map_reduce_args`, and we use this to pass the Name as the argument which provides a key for the function pattern matching. The given map function looks at the `Name` and `Quantity` fields of the current data item, and if the name is equal to the argument (note they are both `N`), then the quantity is returned. We require the second clause so that the map function always matches the data entry (in this case it doesn't change or return anything). The reduce function will then sum all the quantities on each data node and return a single count to the calling process. The calling process then sums the counts from each data node. We now run this along with some similarly defined functions:
+
+{{{
+(d@host)3> dmr_test:db_count("Apple").
+95720
+(d@host)4> dmr_test:db_avg_price("Apple").
+1.89000
+(d@host)5> dmr_test:db_low_price("Apple").
+{0.490000,"Alberta Co-op",0}
+}}}
+
+The first query gets an inventory count of all the apples in all stores. The Second query retrieves the average price of all apples, and the third query will return the price, location, and quantity of the lowest priced apple. The code for the latter functions can also be found in the `dmr_test` module.
+
+We can also do sorting queries much like we did in the numerical example. This is shown with the `dmr_test:db_inventory` function by projecting out the interesting fields from the item in the map function, sorting this in the reduce function, and then merging those sorted lists from each data node in the calling process. This will give a complete, sorted inventory list for a given grocer name.
+
+{{{
+(d@host)6> dmr_test:sort_verify(dmr_test:db_inventory("New Seasons")).     
+true
+(d@host)7> lists:sublist(dmr_test:db_inventory("New Seasons"), 178, 4). 
+[{"Apricot",true,3.99000,8089,34},
+ {"Apricot",true,3.99000,9321,96},
+ {"Blackcurrant",false,0.490000,57,344},
+ {"Blackcurrant",false,0.490000,1905,54}]
+(d@host)8> dmr_test:db_inventory_value("New Seasons").                     
+6.31839e+5
+}}}
+
+The first call retrieves the entire inventory list for "New Seasons" and verifies the entries are indeed sorted correctly. The second call retrieves the same inventory list, but this time only returns entries 178 through 181 to show some sample output. The last function calculates the total value of all items in the inventory for a given grocer. The underlying map function returns the `Price` multiplied by the `Quantity`, and then the reduce and calling process sum up the totals.
+
+One more example to consider is when the data items need to be modified. We define a `dmr_test:db_buy` function that will purchase a given quantity of fruit from a grocer if they have them in stock. If there are enough in stock, the quantity is modified to reflect the purchase, and then total price is returned.
+
+{{{
+(d@host)9> dmr_test:db_buy("Apricot", "New Seasons", 10).              
+3124.50
+(d@host)10> lists:sublist(dmr_test:db_inventory("New Seasons"), 178, 4).
+[{"Apricot",true,3.99000,8089,24},
+ {"Apricot",true,3.99000,9321,86},
+ {"Blackcurrant",false,0.490000,57,344},
+ {"Blackcurrant",false,0.490000,1905,54}]
+}}}
+
+Note that this function will purchase 10 apricots from each row that matches the given name and grocer (otherwise that would be a lot to pay for 10 apricots!). The second query shows the same function as in the last example, but this time you can see the quantity field (the last one) is 10 less for each of the two apricot entries. This demonstrates a powerful idea where you are able to search, modify, and return some computed value all in one operation.
+
+There are many other operations within a database management system that are not demonstrated here for brevity, but may still be possible. For example, a grouping operator could be done with a simple customer aggregator function. More advanced features like joins would require secondary messages to be passed among the data nodes. For example, the left input of a join may search for all matching tuples in the list, and then the result list could be sent off to data nodes holding entries for the right input. The matching could then be done on each of those nodes and the final result sent to the calling process. This type of message passing is currently not supported, but could be with some minor modifications.
+
+There are also synchronization and atomicity issues to deal with, but this may not be important depending on the application. When these issues are important, there are a solutions out there for dealing with these issues such as global locking systems. New solutions for this particular kind of programming model may also be possible. The purpose of this section is to present some basic examples and operators that complex systems can be built on.
 
 === 5 Performance ===
 
@@ -230,6 +307,8 @@ File Scan (dets), B-Tree, Mnesia (get replication)
 erlang port, TCP, Send code as query, compile, map, other lang bindings
 
 === 7 Conclusion ===
+
+----
 
 === References ===
 
