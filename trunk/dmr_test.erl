@@ -21,7 +21,8 @@
 
 -module(dmr_test).
 -export([num_load/1, num_sum/0, num_avg/0, num_avg_sqrt/0, num_sort/0]).
--export([db_load/1, db_select/0]).
+-export([db_load/1, db_count/1, db_avg_price/1, db_low_price/1]).
+-export([db_inventory/1, db_inventory_value/1]).
 -export([sort_verify/1]).
 
 %
@@ -53,7 +54,7 @@ num_avg_sqrt() ->
 
 % perform a distributed merge sort on all numbers
 num_sort() ->
-    merge_sort(dmr:map_reduce(
+    lists:merge(dmr:map_reduce(
         fun (Num) -> {[Num]} end,
         fun (Results) -> [lists:sort(Results)] end)).
 
@@ -62,25 +63,80 @@ num_sort() ->
 %
 
 % this will load X tuples of "random" data
+% Fruit Schema is: {Id, Name, Price, Quantity, Grocer, Organic, Description}
 db_load(X) ->
-    db_load(X, 0,
-        ["Apple", "Orange", "Banana"],
-        [a,b,c,d,e,f,g],
-        [12,54,665,746,3465]).
+    db_load(X, 1,
+        ["Blackcurrant", "Redcurrant", "Gooseberry", "Tomato", "Guava",
+         "Lucuma", "Pomegranate", "Avocado", "Kiwifruit", "Grape", "Orange",
+         "Lemon", "Lime", "Grapefruit", "Banana", "Cranberry", "Blueberry",
+         "Blackberry", "Raspberry", "Boysenberry", "Pineapple", "Fig",
+         "Mulberry", "Apple", "Apricot", "Peach", "Cherry", "Strawberry"],
+        [1.99, 0.49, 0.79, 3.99, 1.49, 0.99, 2.49, 1.19, 2.99, 3.49, 0.89],
+        [456, 87, 34, 877, 344, 23, 54, 677, 45, 11, 0, 776, 96],
+        ["New Seasons", "People's Co-op", "Food Front", "Alberta Co-op",
+         "Food Fight!", "Wild Oats", "Whole Foods", "Fred Meyer"],
+        [true, false, true, true, false, true, false, false, true, false],
+        ["These are quite tasty!", "This batch was a little bitter",
+         "They are now overripe", "These are one the sweet side",
+         "Purchased at the farmer's market", "This batch was full of bugs!",
+         "Ick! This tasted horrible!", "These are from a Washington farmer",
+         "These make for a great tasting pie or cobbler, yum!"]).
 
-db_load(0, _, _, _, _) -> ok;
-db_load(X, Id, [Name | Names], [Tup | Tups], [Num | Nums]) ->
-    dmr:add_fast({Id, Name, Tup, Num}),
-    db_load(X - 1, Id + 1, Names ++ [Name], Tups ++ [Tup], Nums ++ [Num]).
+db_load(0, _, _, _, _, _, _, _) -> ok;
+db_load(X, Id, [N | Name], [P | Price], [Q | Quantity], [G | Grocer],
+    [O | Organic], [D | Description]) ->
+    dmr:add_fast({Id, N, P, Q, G, O, D}),
+    db_load(X - 1, Id + 1, Name ++ [N], Price ++ [P], Quantity ++ [Q],
+        Grocer ++ [G], Organic ++ [O], Description ++ [D]).
 
-% returns all {id,num} pairs for apples and increment the apple number
-db_select() ->
-    dmr:map(
-        fun ({Id, "Apple", Tup, Num}) ->
-                {[{Id, "Apple", Tup, Num + 1}], [{Id,Num}]};
-            (_) ->
-                ok
-        end).
+% returns the total count of fruit with the given name
+db_count(Name) ->
+    lists:sum(dmr:map_reduce_args(
+        fun ({_, N, _, Q, _, _, _}, N) -> {[Q]};
+            (_, _) -> ok
+        end,
+        fun (Results, _) -> [lists:sum(Results)] end,
+        Name)).
+
+% get the average price for a type of fruit
+db_avg_price(Name) ->
+    avg(dmr:map_reduce_args(
+        fun ({_, N, P, _, _, _, _}, N) -> {[P]};
+            (_, _) -> ok
+        end,
+        fun (Results, _) -> [{length(Results), lists:sum(Results)}] end,
+        Name)).
+
+% get the lowest price, grocer, and quantity for a type of fruit
+db_low_price(Name) ->
+    case dmr:map_reduce_args(
+        fun ({_, N, P, Q, G, _, _}, N) -> {[{P, G, Q}]};
+            (_, _) -> ok
+        end,
+        fun ([], _) -> [];
+            (Results, _) -> [lists:min(Results)] end,
+        Name) of
+        [] -> [];
+        Results -> lists:min(Results)
+    end.
+
+% get a section of a sorted inventory list for a given grocer
+db_inventory(Grocer) ->
+    lists:merge(dmr:map_reduce_args(
+        fun ({Id, N, P, Q, G, O, _}, G) -> {[{N, O, P, Id, Q}]};
+            (_, _) -> ok
+        end,
+        fun (Results, _) -> [lists:sort(Results)] end,
+        Grocer)).
+
+% get the value of all inventory items for a given grocer
+db_inventory_value(Grocer) ->
+    lists:sum(dmr:map_reduce_args(
+        fun ({_, _, P, Q, G, _, _}, G) -> {[P * Q]};
+            (_, _) -> ok
+        end,
+        fun (Results, _) -> [lists:sum(Results)] end,
+        Grocer)).
 
 %
 % helper functions
@@ -91,25 +147,7 @@ avg(List) -> avg(List, 0, 0).
 avg([], Count, Sum) -> Sum / Count;
 avg([{C, S} | Tail], Count, Sum) -> avg(Tail, Count + C, Sum + S).
 
-% sort 
-merge_sort([]) -> [];
-merge_sort([[]]) -> [];
-merge_sort(Results) ->
-    {Next, NewResults} = merge_sort_next(Results),
-    [Next | merge_sort(NewResults)].
-
-merge_sort_next([[] | Results]) ->
-    merge_sort_next(Results);
-merge_sort_next([[H | T] | Results]) ->
-    merge_sort_next(Results, H, T, []).
-
-merge_sort_next([], Next, NextT, NewResults) ->
-    {Next, [NextT | NewResults]};
-merge_sort_next([[H | T] | Results], Next, NextT, NewResults) when H < Next ->
-    merge_sort_next(Results, H, T, [[Next | NextT] | NewResults]);
-merge_sort_next([Skip | Results], Next, NextT, NewResults) ->
-    merge_sort_next(Results, Next, NextT, [Skip | NewResults]).
-
+% make sure the given list is actually sorted
 sort_verify([]) -> true;
 sort_verify([H | T]) -> sort_verify(T, H).
 
