@@ -339,6 +339,8 @@ Another limiting aspect of the current implementation is the lack of external in
 
 === 7 Conclusion ===
 
+With processing power spreading to multiple cores and larger clusters of machines, concurrent and distributed systems are playing a key role in developing ways to solve problems. The ideas and programming model presented in this paper should help provide a testing and prototype framework to build these types of systems on. It is my hope that further development will be continue and a more robust, production quality system can be based on the work presented.
+
 ----
 
 === References ===
