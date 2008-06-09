@@ -319,19 +319,23 @@ It is important to mention that this type of scalability will eventually hit som
 
 === 6 Improvements ===
 
+This section briefly discusses potential improvements that can be made to the system. Since this is meant to be an implantation for prototyping and exploring ideas, some of these may not be worth the time required to implement. They are primarily mentioned as topics to keep in mind if a production quality system is designed and implemented on this model.
+
 * 6.1 Persistent Storage *
 
-File Scan (dets), B-Tree, Mnesia (get replication)
+One major weak point in the system is the lack of persistent storage. Currently if a node stops or crashes for any reason all data that it holds is lost. A more robust implementation would use a disk-backed storage mechanism so data may be accessible when restarted. The data could be stored as a flat file or in some other database structure. It may be useful to provide a simple indexing mechanism within the system and store data in B+ trees on disk. This would prevent requiring the entire data set to be scanned for each query. To implement persistent storage in Erlang, one might look at the `dets`, `gb_trees`, or `mnesia` modules.
 
 * 6.2 Redundancy *
 
-* 6.3 Isolated Data Sets *
+If the data being stored within the system is critical, some level of redundancy will be required. The replication model may be single or multi master, have certain restraints due to the storage mechanism, or have restrictions due to geographically distributed nodes. Many sources discuss these options in detail so no information will be given here. If the system is being designed in Erlang, one solution to consider is to leverage `mnesia` for a storage method since it has built-in data replication.
 
-* 6.4 Access Control Lists *
+* 6.3 Access Control Lists *
 
-* 6.5 External Interfaces *
+The current system has no authentication or any kind of access control, but this is required if used in a shared application environment. A simple solution is to identify each data item with an authentication ID and require queries to provide credentials. It may also be useful to implement some type of group system on top of this so data items may be read by multiple authentication IDs. One other solution is to give each authentication ID their own namespace and separate physical data set.
 
-erlang port, TCP, Send code as query, compile, map, other lang bindings
+* 6.4 External Interfaces *
+
+Another limiting aspect of the current implementation is the lack of external interfaces. Only Erlang processes attached to one of the data nodes can currently access the data sets. Since the current interface requires Erlang functions, some level of abstraction would be required here. An interface that accepts strings which are then compiled into code could be used as arguments for the map and reduce functions. Queries could then be accepted through a TCP server or Erlang port and would make bindings to other languages possible. This straightforward implementation would require embedded Erlang functions in other language code. Another option is to introduce a new query language that can be compiled and run during execution.
 
 === 7 Conclusion ===
 
