@@ -1,0 +1,3 @@
+This is a simple distributed map/reduce implementation loosely based on ideas from the [Google Map/Reduce publication](http://labs.google.com/papers/mapreduce.html). I chose to write it in Erlang due to the ease of working with distributed nodes and the obvious functional nature of the project. The current version is meant to be a prototype to explore ideas.
+
+Check out the [Paper](http://code.google.com/p/erldmr/wiki/Paper) I wrote for examples and a more thorough explanation.
